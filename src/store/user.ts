@@ -12,11 +12,11 @@ export const useUserStore = defineStore('user', () => {
   // ==========================
   
   // token: 登录凭证，默认是空字符串
-  const token = ref('') 
+  const token = ref(localStorage.getItem('token') || '') 
   // role: 用户角色 (admin 或 tenant)，用于后续权限控制
-  const role = ref('')
+  const role = ref(localStorage.getItem('role') || '')
   // username: 用户名，用于在界面右上角展示
-  const username = ref('')
+  const username = ref(localStorage.getItem('username') || '')
 
   // ==========================
   // 2. Actions (动作/方法)
@@ -28,14 +28,17 @@ export const useUserStore = defineStore('user', () => {
     
     // 模拟网络延迟：创建 Promise，500毫秒后自动 resolve
     // 这里的 await 意思是：暂停代码执行，等 500ms 也就是 setTimeout 结束后再往下走
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 250))
 
     // 模拟后端验证逻辑
     // 如果是 admin 账号
     if (loginForm.username === 'admin' && loginForm.password === '3768') {
       token.value = 'mock-token-admin-123'
-      role.value = 'admin'
+      role.value = 'admin' 
       username.value = '超级管理员'
+      localStorage.setItem('token', token.value)
+      localStorage.setItem('role', role.value)
+      localStorage.setItem('username', username.value)
       return true // 返回成功
     } 
     // 如果是 tenant (租户) 账号
@@ -43,6 +46,9 @@ export const useUserStore = defineStore('user', () => {
       token.value = 'mock-token-tenant-456'
       role.value = 'tenant'
       username.value = '租户经理'
+      localStorage.setItem('token', token.value)
+      localStorage.setItem('role', role.value)
+      localStorage.setItem('username', username.value)
       return true // 返回成功
     } 
     // 否则登录失败
@@ -55,7 +61,8 @@ export const useUserStore = defineStore('user', () => {
   const logout = () => {
     token.value = ''
     role.value = ''
-    username.value = ''
+    localStorage.removeItem('token')
+    localStorage.removeItem('role')
   }
 
   // ==========================

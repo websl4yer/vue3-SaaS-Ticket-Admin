@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 // 注意：必须引入 store，但不能在最外层直接调用 useUserStore()
 import { useUserStore } from '@/store/user'
+import { compareTime } from 'element-plus/es/components/time-select/src/utils.mjs'
+import component from 'element-plus/es/components/tree-select/src/tree-select-option.mjs'
 
 // 1. 定义路由表
 const routes = [
@@ -12,8 +14,29 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Dashboard',
-    component: () => import('@/views/dashboard/index.vue')
+    name: 'Layout',
+    component: () => import('@/layout/index.vue'), // 🌟 这里指向我们将要新建的 Layout 组件
+    redirect: '/dashboard', // 访问 / 直接重定向到仪表盘
+    children:[{
+        path: 'dashboard', // 注意：子路由的 path 前面通常不加 /，它会自动拼接成 /dashboard
+        name: 'Dashboard',
+        component: () => import('@/views/dashboard/index.vue')
+      },
+      {
+        path: 'categories',
+        name: 'Categories',
+        component: () => import('@/views/categories/index.vue')
+      },
+      {
+        path: 'requests',
+        name: 'Requests',
+        component: () => import('@/views/requests/index.vue')
+      },
+      {
+        path: 'tenants',
+        name: 'Tenants',
+        component: () => import('@/views/tenants/index.vue')
+      }]
   }
 ]
 
@@ -23,6 +46,7 @@ const router = createRouter({
   routes
 })
 
+//路由守卫逻辑
 router.beforeEach((to,from,next) => {
   const userStore = useUserStore();
   const hasToken = !!userStore.token;
