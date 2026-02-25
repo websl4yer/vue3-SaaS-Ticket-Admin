@@ -71,7 +71,7 @@ const loading = ref(false)
 // 表单数据
 const loginForm = reactive({
   username: 'admin',
-  password: '123'
+  password: ''
 })
 
 // ============================
@@ -80,8 +80,11 @@ const loginForm = reactive({
 // 注意：因为内部有 await，所以函数必须标记为 async
 const handleLogin = async () => {
   // 1. 开始转圈圈
+  if(loginForm.password === '' || loginForm.username === ''){
+    ElMessage.warning('请输入账号和密码')
+    return
+  }
   loading.value = true
-  
   try {
     // 2. 调用 Store 里的登录动作
     // await 意思是：等 userStore.login 这个异步函数跑完，拿到结果再往下走
@@ -93,7 +96,7 @@ const handleLogin = async () => {
       ElMessage.success('登录成功，正在跳转...')
       
       // 4. 路由跳转：跳到首页 ('/')
-      // 注意：如果你的 router/index.ts 还没配置 '/' 路由，这里可能会报错，等下我们解决
+      // 注意：如果 router/index.ts 还没配置 '/' 路由，这里可能会报错
       router.push('/')
     } else {
       // 失败提示 (红色弹窗)

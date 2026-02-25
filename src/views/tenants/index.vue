@@ -66,16 +66,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch} from 'vue'
 import { ElMessage, ElMessageBox} from 'element-plus'
-
-// 1. 定义服务商的数据结构
-interface Tenant {
-  id: number;
-  name: string;
-  contact: string;
-  phone: string;
-  status: number; // 1: 正常, 0: 封禁
-  createTime: string;
-}
+import { getTenantsApi, updateTenantStatusApi,type Tenant  } from '@/api/tenant'
 
 // 2. 响应式状态声明
 const loading = ref(false)
@@ -89,13 +80,6 @@ const formModel = reactive({
   status: 1 as 0 | 1 ,// 给 status 一个明确的类型/ 1: 正常, 0: 封禁
   createTime: ''
 })
-
-// 3. 模拟的后端假数据
-const mockList: Tenant[] = [
-  { id: 1001, name: '极速家电维修中心', contact: '张师傅', phone: '13800138000', status: 1, createTime: '2024-03-01 10:00:00' },
-  { id: 1002, name: '安居开锁服务', contact: '李师傅', phone: '13911112222', status: 1, createTime: '2024-03-02 14:30:00' },
-  { id: 1003, name: '黑心中介公司', contact: '王老板', phone: '13788889999', status: 0, createTime: '2024-03-05 09:15:00' }
-]
 
 // 打开【新增】弹窗
 const handleCreate = () => {
@@ -146,76 +130,47 @@ const handleSubmit = () => {
 }
 
 const handleToggleStatus = async (row: Tenant) => {
-  const actionText = (row.status === 1) ? '封禁' : '解封';
+  const newStatus = row.status === 1 ? 0 : 1;
+  const actionText = row.status === 1 ? '封禁' : '解封';
+  
+  // 保存旧状态用于回滚
+  const oldStatus = row.status;
+  
   try {
-    // 第一步：呼出二次确认框。
-    // 程序执行到 await 这里会“暂停”，等待用户的点击抉择
-    await ElMessageBox.confirm(
-      `确定要将服务号 "${row.name}" ${actionText}吗？此操作不可恢复！`, // 提示文字
-      '状态变更确认', // 弹窗标题
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning', // 会显示一个黄色的警告图标
-      }
-    )
-
-    // ==========================================
-    // 第二步：如果代码能走到这里，说明用户刚刚点击了“确定删除”！
-    // ==========================================
+    // 先更新本地状态（提供即时反馈）
+    row.status = newStatus;
     
-    // 1. 去花名册 (tableData) 里，找到要删除的那个人的“座号” (索引)
-    const index = tableData.value.findIndex(item => item.id === row.id)
-    // 2. 如果找到了 (index > -1)
-    // 先取出目标元素
-    const targetItem = tableData.value[index]
-    // 双重判断：索引有效 + 元素存在
-    if (index > -1 && targetItem) {
-      targetItem.status = row.status === 1 ? 0 : 1
-      ElMessage.success(`已成功${actionText}服务号`)
+    // 调用API
+    await updateTenantStatusApi(row.id, newStatus)
+    
+    ElMessage.success(`已成功${actionText}该服务商`)
+  } catch (error) {
+    // 如果接口报错，回滚到旧状态
+    row.status = oldStatus;
+    ElMessage.error('操作失败')
+  }
+}
+
+
+const fetchData = async () => {
+  loading.value = true;
+  try {
+    const res: any = await getTenantsApi();
+    if (res.code === 200) {
+      // 确保所有数据都有 createTime 字段
+      tableData.value = res.data.map((item: Tenant) => ({
+        ...item,
+        createTime: item.createTime || new Date().toLocaleDateString()
+      }));
     }
   } catch (error) {
-    // 第三步：如果用户点击了“点错了”或者关掉了弹窗，Promise 会报错，就会跳到这里
-    ElMessage.info('已取消操作')
-  }
-}
-
-// API 模拟：获取列表数据
-// 注意看这个函数的写法，这是前端模拟异步请求的标准套路
-const getTenantListAPI = () => {
-  return new Promise<{ code: number; data: Tenant[] }>((resolve) => {
-    setTimeout(() => {
-      // 【升级区】：尝试从本地存储读取存档
-      const localData = localStorage.getItem('mock_tenant_list')
-      
-      if (localData) {
-        // 如果有存档，就把字符串解析成数组返回
-        resolve({ code: 200, data: JSON.parse(localData) })
-      } else {
-        // 如果没有存档（第一次访问），就返回初始的 mockList
-        resolve({ code: 200, data: mockList })
-      }
-    }, 800)
-  })
-}
-
-// TODO: 手写区 - 实现 fetchData 方法,接收列表数据，传递给tableData
-const fetchData = async () =>{
-  loading.value = true;
-  try{
-    const apiData = await getTenantListAPI();
-    if(apiData.code === 200){
-      tableData.value = apiData.data;
-    }
-  }
-  catch(error)
-  {
     ElMessage.error('获取列表失败');
-  }
-  finally{
+  } finally {
     loading.value = false;
   }
-}
+};
+
+
 
 // ==========================================
 // 魔法监控区：全自动本地化存储
