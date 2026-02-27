@@ -67,11 +67,10 @@
 import { ref, onMounted, reactive, watch} from 'vue'
 import { ElMessage, ElMessageBox} from 'element-plus'
 import { getTenantsApi, updateTenantStatusApi,type Tenant  } from '@/api/tenant'
+import { useTable } from '@/hooks/useTable'
 
 // 2. 响应式状态声明
-const loading = ref(false)
 const dialogVisible = ref(false)
-const tableData = ref<Tenant[]>([])
 const formModel = reactive({
   id: 0,
   name: '',
@@ -103,30 +102,42 @@ const handleEdit = (row: Tenant) => {
   dialogVisible.value = true
 }
 
-const handleSubmit = () => {
-  if (formModel.id) {
-      // 编辑逻辑
-      // 1. 在 tableData 数组中找到 id 匹配的项
-      const index = tableData.value.findIndex(item => item.id === formModel.id)
+const handleSubmit = async () => {
+  try {
+    // 1. 模拟与“后端数据库(localStorage)”交互
+    let dbData = JSON.parse(localStorage.getItem('mock_tenant_list') || '[]')
+
+    if (formModel.id) {
+      // --- 模拟调用【编辑】API ---
+      const index = dbData.findIndex((item: any) => item.id === formModel.id)
       if (index > -1) {
-        // 2. 更新该项的数据
-        tableData.value[index] = { ...formModel }
+        dbData[index] = { ...formModel }
       }
       ElMessage.success('编辑成功')
     } else {
-      // 新增逻辑
-      // 1. 创建一个新对象（给个模拟的 ID）
-      const newItem: Tenant = { 
+      // --- 模拟调用【新增】API ---
+      const newItem = { 
         ...formModel, 
-        id: Date.now(), // 用时间戳模拟唯一 ID
-        createTime: new Date().toLocaleString() // 模拟创建时间
+        id: Date.now(), 
+        createTime: new Date().toLocaleString() 
       }
-      // 2. 将新对象添加到数组开头
-      tableData.value.unshift(newItem)
+      dbData.unshift(newItem)
       ElMessage.success('新增成功')
     } 
+
+    // 2. 后端保存数据成功（写回本地存储）
+    localStorage.setItem('mock_tenant_list', JSON.stringify(dbData))
+    
     // 3. 关闭弹窗
     dialogVisible.value = false 
+
+    // 🌟 4. 终极杀手锏：利用 Hook 重新加载数据！
+    // 以前我们要自己改 tableData，现在啥也不用管，直接让 Hook 重新去后台拉一次数据，页面自动就更新了！
+    loadData()
+
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
 }
 
 const handleToggleStatus = async (row: Tenant) => {
@@ -152,47 +163,14 @@ const handleToggleStatus = async (row: Tenant) => {
 }
 
 
-const fetchData = async () => {
-  loading.value = true;
-  try {
-    const res: any = await getTenantsApi();
-    if (res.code === 200) {
-      // 确保所有数据都有 createTime 字段
-      tableData.value = res.data.map((item: Tenant) => ({
-        ...item,
-        createTime: item.createTime || new Date().toLocaleDateString()
-      }));
-    }
-  } catch (error) {
-    ElMessage.error('获取列表失败');
-  } finally {
-    loading.value = false;
-  }
-};
+const { tableData, loading, loadData } = useTable(getTenantsApi)
 
-
-
-// ==========================================
-// 魔法监控区：全自动本地化存储
-// ==========================================
-// watch 接收三个参数：
-// 1. 要盯着谁看？(tableData)
-// 2. 发现变化了干什么？((newData) => { ... })
-// 3. 监控配置：{ deep: true } (深度监听，非常重要！)
-watch(
-  tableData, 
-  (newData) => {
-    // 只要 tableData 发生变化，立刻把它转换成 JSON 字符串，塞进本地存储
-    localStorage.setItem('mock_tenant_list', JSON.stringify(newData))
-    console.log('数据已自动存档！') // 你可以在控制台看到这句提示
-  }, 
-  { deep: true } 
-)
 
 // 使用 onMounted 生命周期钩子，确保在组件被挂载到页面上之后，
 // 立刻自动调用一次 fetchData 函数，去获取初始数据。
 onMounted(() => {
-  fetchData();
+  // 原来是调用 fetchData()，现在改为 Hook 提供的 loadData()
+  loadData();
 });
 </script>
 
