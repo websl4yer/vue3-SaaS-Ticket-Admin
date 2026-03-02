@@ -11,7 +11,10 @@
             <el-menu-item
             v-for="item in filteredMenuList"
             :key="item.path"
-            :index="item.path">
+            :index="item.path"
+            @mouseenter="onMenuItemMouseEnter(item.path)"
+            @mouseleave="onMenuItemMouseLeave"
+            >
             <span>{{ item.name}}</span>
             </el-menu-item>
         </el-menu>
@@ -43,6 +46,51 @@ import { computed } from 'vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+// --- 路由预加载逻辑 ---
+const prefetchedRoutes = new Set<string>()
+let prefetchTimer: number | null = null
+
+const doPrefetch = (path: string) => {
+  if (prefetchedRoutes.has(path)) {
+    return
+  }
+  const route = router.getRoutes().find(r => r.path === path)
+
+  if (route && route.components && typeof route.components.default === 'function') {
+    try {
+      // 我们大胆地尝试调用它。
+      // 如果它是一个懒加载函数，它会正常执行并返回一个 Promise。
+      // 如果它是一个类组件构造函数，直接调用会抛出一个 TypeError，会被 catch 捕获。
+      // @ts-expect-error TS2349: 我们知道此表达式可能不可调用，但 catch 块会处理该情况。
+      route.components.default()
+
+      // 标记为已预加载（只有在上面的调用没有抛出错误时才会执行）
+      prefetchedRoutes.add(path)
+    } catch (e) {
+      // 静默地忽略错误。这很可能意味着我们尝试调用了一个组件构造函数，
+      // 这不是我们想要预加载的目标，所以忽略是正确的行为。
+    }
+  }
+}
+
+// 鼠标进入菜单项，延迟 200ms 后触发预加载
+const onMenuItemMouseEnter = (path: string) => {
+  if (prefetchTimer) clearTimeout(prefetchTimer)
+  prefetchTimer = window.setTimeout(() => {
+    doPrefetch(path)
+  }, 200)
+}
+
+// 鼠标离开菜单项，清除定时器
+const onMenuItemMouseLeave = () => {
+  if (prefetchTimer) {
+    clearTimeout(prefetchTimer)
+    prefetchTimer = null
+  }
+}
+// --- 路由预加载逻辑结束 ---
+
 
 const handleLogout = () => {
   userStore.logout() 

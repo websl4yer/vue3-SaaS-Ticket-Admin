@@ -5,35 +5,18 @@
       <el-button type="primary" icon="Plus" @click="handleCreate">新增服务商</el-button>
     </div>
 
-    <!-- 核心表格区 -->
-    <el-table :data="tableData" border stripe v-loading="loading" style="width: 100%; margin-top: 20px;">
-      <el-table-column prop="id" label="ID" width="80" align="center" />
-      <el-table-column prop="name" label="服务商(公司)名称" min-width="180" />
-      <el-table-column prop="contact" label="联系人" width="120" />
-      <el-table-column prop="phone" label="手机号" width="150" />
-      <el-table-column prop="createTime" label="入驻时间" width="180" />
-      
-      <!-- 手写区：状态列 -->
-      <el-table-column label="状态" width="100" align="center">
-        <template #default="{row}">
-          <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-            {{ row.status === 1 ? '正常' : '封禁' }}
-          </el-tag>
-        </template>
-        <!-- 等待你手写插槽 -->
-      </el-table-column>
-
-      <!-- 手写区：操作列 -->
-      <el-table-column label="操作" width="150" align="center">
-        <template #default = "{row}">
-          <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          <!-- 动态显示封禁和解封 -->
-          <el-button :type="row.status === 1? 'danger' : 'success'" 
-          link @click="handleToggleStatus(row)">{{ row.status === 1 ? '封禁' : '解封' }}</el-button>
-        </template>
-        <!-- 等待你手写插槽 -->
-      </el-table-column>
-    </el-table>
+    <!-- 核心表格区 - 已升级为虚拟滚动表格 -->
+    <div ref="tableContainerRef" class="table-v2-container">
+      <el-table-v2
+        v-if="tableWidth > 0"
+        :columns="columns"
+        :data="tableData"
+        :width="tableWidth"
+        :height="tableHeight"
+        :loading="loading"
+        fixed
+      />
+    </div>
 
     <el-dialog v-model="dialogVisible" :title="formModel.id ? '编辑服务商' : '新增服务商'" width="500px">
       <el-form :model="formModel" label-width="120px">
@@ -64,10 +47,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive, watch} from 'vue'
-import { ElMessage, ElMessageBox} from 'element-plus'
-import { getTenantsApi, updateTenantStatusApi,type Tenant  } from '@/api/tenant'
+import { ref, onMounted, onUnmounted, reactive, h } from 'vue'
+import { ElMessage, ElButton, ElTag } from 'element-plus'
+import type { Column } from 'element-plus'
+import { getTenantsApi, updateTenantStatusApi, type Tenant  } from '@/api/tenant'
 import { useTable } from '@/hooks/useTable'
+
+// 表格尺寸
+const tableContainerRef = ref<HTMLDivElement>()
+const tableWidth = ref(0)
+const tableHeight = ref(0)
 
 // 2. 响应式状态声明
 const dialogVisible = ref(false)
@@ -79,6 +68,41 @@ const formModel = reactive({
   status: 1 as 0 | 1 ,// 给 status 一个明确的类型/ 1: 正常, 0: 封禁
   createTime: ''
 })
+
+// el-table-v2 的列定义
+const columns: Column<Tenant>[] = [
+  { key: 'id', dataKey: 'id', title: 'ID', width: 80, align: 'center' },
+  { key: 'name', dataKey: 'name', title: '服务商(公司)名称', width: 180 },
+  { key: 'contact', dataKey: 'contact', title: '联系人', width: 120 },
+  { key: 'phone', dataKey: 'phone', title: '手机号', width: 150 },
+  { key: 'createTime', dataKey: 'createTime', title: '入驻时间', width: 180 },
+  {
+    key: 'status',
+    title: '状态',
+    width: 100,
+    align: 'center',
+    cellRenderer: ({ rowData }) => h(
+      ElTag,
+      { type: rowData.status === 1 ? 'success' : 'danger' },
+      () => rowData.status === 1 ? '正常' : '封禁'
+    )
+  },
+  {
+    key: 'operations',
+    title: '操作',
+    width: 150,
+    align: 'center',
+    cellRenderer: ({ rowData }) => h('div', null, [
+      h(ElButton, { type: 'primary', link: true, onClick: () => handleEdit(rowData) }, () => '编辑'),
+      h(ElButton, {
+        type: rowData.status === 1 ? 'danger' : 'success',
+        link: true,
+        onClick: () => handleToggleStatus(rowData)
+      }, () => rowData.status === 1 ? '封禁' : '解封')
+    ])
+  }
+]
+
 
 // 打开【新增】弹窗
 const handleCreate = () => {
@@ -127,7 +151,7 @@ const handleSubmit = async () => {
 
     // 2. 后端保存数据成功（写回本地存储）
     localStorage.setItem('mock_tenant_list', JSON.stringify(dbData))
-    
+
     // 3. 关闭弹窗
     dialogVisible.value = false 
 
@@ -143,17 +167,17 @@ const handleSubmit = async () => {
 const handleToggleStatus = async (row: Tenant) => {
   const newStatus = row.status === 1 ? 0 : 1;
   const actionText = row.status === 1 ? '封禁' : '解封';
-  
+
   // 保存旧状态用于回滚
   const oldStatus = row.status;
-  
+
   try {
     // 先更新本地状态（提供即时反馈）
     row.status = newStatus;
-    
+
     // 调用API
     await updateTenantStatusApi(row.id, newStatus)
-    
+
     ElMessage.success(`已成功${actionText}该服务商`)
   } catch (error) {
     // 如果接口报错，回滚到旧状态
@@ -165,13 +189,30 @@ const handleToggleStatus = async (row: Tenant) => {
 
 const { tableData, loading, loadData } = useTable(getTenantsApi)
 
+// 监听容器尺寸变化，并更新表格的宽高
+let resizeObserver: ResizeObserver | null = null
+const observeTableResize = () => {
+  if (tableContainerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      if(tableContainerRef.value) {
+        tableWidth.value = tableContainerRef.value.offsetWidth
+        tableHeight.value = tableContainerRef.value.offsetHeight
+      }
+    })
+    resizeObserver.observe(tableContainerRef.value)
+  }
+}
 
-// 使用 onMounted 生命周期钩子，确保在组件被挂载到页面上之后，
-// 立刻自动调用一次 fetchData 函数，去获取初始数据。
 onMounted(() => {
-  // 原来是调用 fetchData()，现在改为 Hook 提供的 loadData()
   loadData();
+  observeTableResize();
 });
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+})
 </script>
 
 <style scoped>
@@ -179,9 +220,17 @@ onMounted(() => {
   padding: 20px;
   background-color: #fff;
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 130px); /* 减去layout的padding和header高度 */
 }
 .toolbar {
   display: flex;
   justify-content: space-between;
+  flex-shrink: 0;
+}
+.table-v2-container {
+  margin-top: 20px;
+  flex-grow: 1; /* 让表格容器占据所有剩余空间 */
 }
 </style>
